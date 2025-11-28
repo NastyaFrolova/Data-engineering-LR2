@@ -1,0 +1,747 @@
+{
+  "name": "TelegramBot",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const data = $getWorkflowStaticData('global');\n\nreturn {\n  offset: data.offset ?? 0,   // если offset не задан — 0\n};\n    "
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        0
+      ],
+      "id": "dd41e26a-7e3a-44a0-9f37-4fded764e6ae",
+      "name": "Read Offset"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        176,
+        0
+      ],
+      "id": "289c5c6d-c844-4585-9f5c-581d0a1b8ebc",
+      "name": "Poll Telegram",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/botPLACEYOURBOTTOKEN/getUpdates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{$json.offset}}"
+            },
+            {
+              "name": "timeout",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        576,
+        0
+      ],
+      "id": "fd9f1952-7dff-4652-8f01-29880803e9f2",
+      "name": "Updates"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4117e315-6b4a-42f6-abc4-5f64824e3a52",
+              "leftValue": "={{ $json.result?.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "4494a72a-1f86-49cc-92bd-31e6d28eff46",
+      "name": "New message?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "73e9f63c-2fec-4ab6-933c-50a8731508c0",
+              "leftValue": "={{ $json.result[0].message.document.mime_type }}",
+              "rightValue": "video/mp4",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        -16
+      ],
+      "id": "15a8bf49-abf0-45c5-b010-ea6e2bf8308f",
+      "name": "URL or File?"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/botPLACEYOURBOTTOKEN/getFile",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "file_id",
+              "value": "={{ $json.result[0].message.document.file_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1616,
+        -144
+      ],
+      "id": "9ad900e6-3f86-4c25-a39d-e045c45a9511",
+      "name": "Get File Path from TG"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://service:8001/transcribe/",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "video",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2592,
+        -32
+      ],
+      "id": "c28ea102-8e9c-412d-90fc-88b60f6b3c04",
+      "name": "Transcribe via Service"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/Helsinki-NLP/opus-mt-en-ru",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inputs\": \"={{ $json.text }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3248,
+        160
+      ],
+      "id": "353801b8-ec89-4579-9439-930328d1d4e8",
+      "name": "Translate with Hugging Face",
+      "credentials": {
+        "httpHeaderAuth": {
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=rm -f /tmp/*.srt /tmp/final_output.mp4 /tmp/input-video.mp4\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        5344,
+        -48
+      ],
+      "id": "321c8aaf-f975-47ca-b021-ce156f0b5996",
+      "name": "Cleanup Temp Files"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst updates = $input.all().map(item => item.json);\n\nconst data = $getWorkflowStaticData('global');\n\nif (updates.length > 0) {\n  const lastUpdateId = updates[updates.length - 1].update_id;\n\n  // сохраняем offset\n  data.offset = lastUpdateId + 1;\n\n  return updates.map(update => ({ json: update }));\n}\n\nreturn [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        -16
+      ],
+      "id": "a503812d-1223-455b-93a8-646a096b30d8",
+      "name": "Process Offsets"
+    },
+    {
+      "parameters": {
+        "operation": "sendVideo",
+        "chatId": "PLACEYOURCHATID",
+        "binaryData": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4768,
+        -48
+      ],
+      "id": "3a216bcb-1f47-48e4-8b1a-39671e2fbea6",
+      "name": "Send a video",
+      "webhookId": "61e75ef6-8316-4238-a2e0-29561b744cc7",
+      "credentials": {
+        "telegramApi": {
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItems = $input.all();\n\n// Берём весь SRT из первого item\nconst raw = inputItems[0].json.data;\n\n// Разбиваем по пустым строкам\nconst blocks = raw.trim().split(/\\n\\n+/);\n\nconst parsed = blocks.map(block => {\n  const lines = block.split(\"\\n\");\n\n  const index = lines[0].trim();\n  const time = lines[1].trim();\n  \n  // Третья строка и далее — текст субтитров\n  const text = lines.slice(2).join(\" \").trim();\n\n  return {\n    index,\n    time,\n    text\n  };\n});\n\n// Возвращаем массив items\nreturn parsed.map(p => ({ json: p }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        -32
+      ],
+      "id": "f66812a0-4889-4663-adcc-7bf3b55ae2e2",
+      "name": "Parse SRT"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet srt = \"\";\n\nfor (let i = 0; i < items.length; i += 2) {\n  const block = items[i]?.json;\n  const ru = items[i + 1]?.json;\n\n  if (!block || !ru) continue;\n\n  const index = block.index;\n  const time = block.time?.replace(/\\./g, ',');\n  const text_ru = ru.text_ru;\n\n  if (index && time && text_ru) {\n    srt += `${index}\\n`;\n    srt += `${time}\\n`;\n    srt += `${text_ru}\\n\\n`;\n  }\n}\n\nreturn [\n  {\n    json: {\n      srt_ru: srt.trim(),\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3456,
+        -48
+      ],
+      "id": "336bcb43-0cd8-4e66-84aa-1363b0b1a659",
+      "name": "Create Russian SRT"
+    },
+    {
+      "parameters": {
+        "chatId": "PLACEYOURCHATID",
+        "text": "Видео успешно переведено!",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5008,
+        -48
+      ],
+      "id": "4cfde2a7-3b52-4aeb-8e7b-76f51349c426",
+      "name": "Send a text message",
+      "webhookId": "9d7e9a00-b2d5-458f-ad7c-5964d4c45e43",
+      "credentials": {
+        "telegramApi": {
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.result.file_id }}",
+        "additionalFields": {
+          "mimeType": "video/mp4"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1904,
+        -144
+      ],
+      "id": "2144f75c-69ec-49a8-9605-d69d94bc63a9",
+      "name": "Telegram",
+      "webhookId": "3729a7ce-86c4-4650-ab33-ead436529b71",
+      "credentials": {
+        "telegramApi": {
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.result[0].message.text }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "downloaded_video.mp4"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1744,
+        80
+      ],
+      "id": "604813b8-5f15-431b-9236-c6a31a838391",
+      "name": "URL"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/tmp/input-video.mp4",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2256,
+        -32
+      ],
+      "id": "37d0cc8f-467c-44fd-9f31-14a27adb5a10",
+      "name": "Save input video"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3008,
+        -32
+      ],
+      "id": "9d58a8a3-8138-443b-a866-436d32679c5f",
+      "name": "Strings in SRT"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    index: $input.item.json.index,\n    time: $input.item.json.time,\n    text_en: $input.item.json.text,\n    text_ru: $json.translation_text\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        144
+      ],
+      "id": "85568784-ea87-495f-8dea-2fa24be09c45",
+      "name": "Rename"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3456,
+        144
+      ],
+      "id": "10aacf16-b696-446a-aa4e-9fb690ad1316",
+      "name": "Original+Translate"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "=srt_ru",
+        "options": {
+          "fileName": "subtitles_ru.srt"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        3664,
+        -48
+      ],
+      "id": "32b9db79-115c-4dbe-9bb7-a29777296bc3",
+      "name": "Convert Russian SRT"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/tmp/subtitles_ru.srt",
+        "dataPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        4000,
+        -48
+      ],
+      "id": "1ee38551-1a68-479c-a57a-4a2b83863a02",
+      "name": "Save Russian SRT"
+    },
+    {
+      "parameters": {
+        "command": "ffmpeg -y -i \"/tmp/input-video.mp4\" -i \"/tmp/subtitles_ru.srt\" -c:a copy -c:v libx264 -preset veryfast -crf 23 -vf \"subtitles=/tmp/subtitles_ru.srt:force_style='FontName=DejaVu Sans,FontSize=20'\" \"/tmp/final_output.mp4\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        4256,
+        -48
+      ],
+      "id": "03b2dc54-0912-482a-92e6-fb98218a59cc",
+      "name": "Append SRT to Video"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/tmp/final_output.mp4",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        4512,
+        -48
+      ],
+      "id": "c95fbc5f-72ab-426f-999b-7316d038bbd9",
+      "name": "Save Final Video"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Read Offset": {
+      "main": [
+        [
+          {
+            "node": "Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Telegram": {
+      "main": [
+        [
+          {
+            "node": "Read Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Updates": {
+      "main": [
+        [
+          {
+            "node": "New message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New message?": {
+      "main": [
+        [
+          {
+            "node": "Process Offsets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "URL or File?": {
+      "main": [
+        [
+          {
+            "node": "Get File Path from TG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Path from TG": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe via Service": {
+      "main": [
+        [
+          {
+            "node": "Parse SRT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate with Hugging Face": {
+      "main": [
+        [
+          {
+            "node": "Original+Translate",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Process Offsets": {
+      "main": [
+        [
+          {
+            "node": "URL or File?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a video": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SRT": {
+      "main": [
+        [
+          {
+            "node": "Strings in SRT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Russian SRT": {
+      "main": [
+        [
+          {
+            "node": "Convert Russian SRT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Temp Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram": {
+      "main": [
+        [
+          {
+            "node": "Save input video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL": {
+      "main": [
+        [
+          {
+            "node": "Save input video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save input video": {
+      "main": [
+        [
+          {
+            "node": "Transcribe via Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strings in SRT": {
+      "main": [
+        [
+          {
+            "node": "Create Russian SRT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Translate with Hugging Face",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Original+Translate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rename": {
+      "main": [
+        [
+          {
+            "node": "Strings in SRT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Original+Translate": {
+      "main": [
+        [
+          {
+            "node": "Rename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Russian SRT": {
+      "main": [
+        [
+          {
+            "node": "Save Russian SRT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Russian SRT": {
+      "main": [
+        [
+          {
+            "node": "Append SRT to Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append SRT to Video": {
+      "main": [
+        [
+          {
+            "node": "Save Final Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Final Video": {
+      "main": [
+        [
+          {
+            "node": "Send a video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d0c732b6-3630-424c-96fa-eaf2e870e9fb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "..."
+  },
+  "id": "ZTjoqWuNEJepRCsM",
+  "tags": []
+}

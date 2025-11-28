@@ -1,0 +1,54 @@
+#version: '3.8'
+
+services:
+  n8n:
+    build:
+      context: .
+      dockerfile: n8n.Dockerfile
+    ports:
+      - "5678:5678"
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=${N8N_PORT}
+      - N8N_PROTOCOL=${N8N_PROTOCOL}
+      - N8N_SECURE_FILE_ACCESS=false
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Moscow
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+    volumes:
+      # Общая папка для файлов между n8n и сервисом
+      - ${WORKFLOW_FILES_DIR}:/tmp/n8n-workflow-files
+      # А здесь данные n8n
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      service:
+        condition: service_healthy # Ждем, пока сервис не станет health, чтобы быть уверенным, что сервис работает
+    networks:
+      - app-net
+
+  service:
+    build: ./service
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${WORKFLOW_FILES_DIR}:/tmp/n8n-workflow-files
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+    healthcheck: # делаем health chekи, так как у меня сервис иногда отваливался
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 100s # Можно настроить временные промежутки
+    networks:
+      - app-net
+
+networks:
+  app-net:
+
+volumes:
+  n8n_data:
